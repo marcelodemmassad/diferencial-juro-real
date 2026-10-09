@@ -19,13 +19,20 @@ def load_data():
     df_us.columns = ["TIPS_10A"]
 
     # 2. NTN-B 10 anos / Taxa de juro real Brasil via API do BCB
+    # Série 21619 - IPCA+ 10 anos / NTN-B 10A
     url_bcb = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.21619/dados?formato=json"
     response = requests.get(url_bcb)
-    df_br = pd.DataFrame(response.json())
+    data_json = response.json()
+    
+    # Criar DataFrame explicitamente a partir da lista de dicionários
+    df_br = pd.DataFrame(data_json)
+    
+    # Tratar colunas
     df_br["data"] = pd.to_datetime(df_br["data"], format="%d/%m/%Y")
     df_br["valor"] = pd.to_numeric(df_br["valor"], errors="coerce")
+    df_br = df_br.dropna(subset=["valor"])
     df_br.set_index("data", inplace=True)
-    df_br.columns = ["NTNB_10A"]
+    df_br.rename(columns={"valor": "NTNB_10A"}, inplace=True)
 
     # 3. Combinar e calcular diferencial
     df = df_br.join(df_us, how="inner").dropna()
