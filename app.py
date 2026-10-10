@@ -12,7 +12,7 @@ st.title("Diferencial de juro real — 10 anos (Brasil – EUA)")
 @st.cache_data(ttl=3600)
 def fetch_bcb_historico_completo(codigo_serie, start_year=2005):
     """
-    Busca os dados do SGS do BCB em blocos de no máximo 10 anos para contornar a restrição da API.
+    Busca os dados do SGS do BCB em blocos de 10 anos.
     """
     current_year = datetime.today().year
     df_list = []
@@ -49,10 +49,9 @@ def load_data():
     df_us = web.DataReader("DFII10", "fred", start_date, end_date)
     df_us.columns = ["TIPS_10A"]
 
-    # 2. NTN-B 10 anos via BCB (em blocos)
+    # 2. NTN-B 10 anos via BCB
     df_br = fetch_bcb_historico_completo(21619, start_year=2005)
     
-    # Garantir compatibilidade nos índices
     df_br.index = pd.to_datetime(df_br.index)
     df_us.index = pd.to_datetime(df_us.index)
 
@@ -65,64 +64,82 @@ def load_data():
 try:
     df = load_data()
     
-    # Cálculos Estatísticos para o Visual idêntico ao Brasil Horizonte
+    # Métrica do topo e Estatísticas idênticas ao cabeçalho da imagem
+    ultimo = df["Diferencial"].iloc[-1]
     media = df["Diferencial"].mean()
     std = df["Diferencial"].std()
     p25 = df["Diferencial"].quantile(0.25)
     p75 = df["Diferencial"].quantile(0.75)
-    ultimo = df["Diferencial"].iloc[-1]
 
-    # Métricas no topo
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Último Diferencial", f"{ultimo:.2f} p.p.")
-    col2.metric("Média do Período", f"{media:.2f} p.p.")
-    col3.metric("Desvio Padrão (σ)", f"{std:.2f}")
-    col4.metric("Faixa 25%-75%", f"{p25:.2f} a {p75:.2f} p.p.")
+    st.markdown(
+        f"**Em {df.index[-1].strftime('%d/%m/%Y')}:** **{ultimo:.2f} p.p.** "
+        f"• média do período **{media:.2f} p.p.** (σ {std:.2f}) "
+        f"• faixa **{p25:.2f}** a **{p75:.2f}** • percentil 25 do período"
+    )
 
-    # Construção do Gráfico Interativo
+    # Construção do Gráfico
     fig = go.Figure()
 
-    # Preparar polígono para a Faixa Sombreada: Média ± Desvio Padrão
-    x_banda = df.index.tolist() + df.index[::-1].tolist()
-    y_superior = [media + std] * len(df)
-    y_inferior = [media - std] * len(df)
-    y_banda = y_superior + y_inferior[::-1]
+    # Dates x-axis
+    x_dates = df.index.tolist()
+    x_banda = x_dates + x_dates[::-1]
 
-    # Faixa Sombreada usando 'toself'
+    # --- BANDA 1 (Externa / Mais Clara): Média ± 1 Desvio Padrão ---
+    y_std_sup = [media + std] * len(df)
+    y_std_inf = [media - std] * len(df)
+    y_banda_std = y_std_sup + y_std_inf[::-1]
+
     fig.add_trace(go.Scatter(
         x=x_banda,
-        y=y_banda,
+        y=y_banda_std,
         fill='toself',
-        fillcolor='rgba(225, 212, 188, 0.4)',
+        fillcolor='rgba(235, 225, 205, 0.35)', # Bege bem claro
         line=dict(color='rgba(255,255,255,0)'),
         hoverinfo="skip",
-        name="Média ± DP"
+        name="Média ± 1 DP"
     ))
 
-    # Linha Tracejada da Média
+    # --- BANDA 2 (Interna / Mais Escura): Percentil 25 ao Percentil 75 ---
+    y_p75 = [p75] * len(df)
+    y_p25 = [p25] * len(df)
+    y_banda_p = y_p75 + y_p25[::-1]
+
+    fig.add_trace(go.Scatter(
+        x=x_banda,
+        y=y_banda_p,
+        fill='toself',
+        fillcolor='rgba(215, 195, 160, 0.50)', # Bege mais escuro
+        line=dict(color='rgba(255,255,255,0)'),
+        hoverinfo="skip",
+        name="Faixa P25 - P75"
+    ))
+
+    # Linha tracejada da Média
     fig.add_hline(
         y=media, 
-        line_dash="dash", 
-        line_color="#777777", 
+        line_dash="dot", 
+        line_color="#a09080", 
+        line_width=1,
         annotation_text=f"Média: {media:.2f} p.p.",
         annotation_position="bottom right"
     )
 
-    # Linha do Diferencial (Cor castanha/dourada original)
+    # Linha principal do Diferencial
     fig.add_trace(go.Scatter(
         x=df.index, 
         y=df["Diferencial"], 
         mode="lines", 
-        name="Diferencial",
-        line=dict(color="#a86e1e", width=1.6)
+        name="Diferencial (Brasil - EUA)",
+        line=dict(color="#a86e1e", width=1.8)
     ))
 
     fig.update_layout(
         xaxis_title="",
-        yaxis_title="Diferencial (p.p.)",
+        yaxis_title="Percentagem (p.p.)",
         template="plotly_white",
         hovermode="x unified",
         height=550,
+        showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
 
