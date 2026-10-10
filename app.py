@@ -3,7 +3,7 @@ import pandas as pd
 import pandas_datareader.data as web
 import plotly.graph_objects as go
 from bcb import sgs
-from datetime import datetime
+from datetime import datetime, timedelta
 
 st.set_page_config(page_title="Diferencial de Juro Real", layout="wide")
 
@@ -11,18 +11,22 @@ st.title("Diferencial de juro real — 10 anos (Brasil – EUA)")
 
 @st.cache_data(ttl=3600)  # Atualiza os dados a cada 1 hora
 def load_data():
-    end_date = datetime.today().strftime('%Y-%m-%d')
-    start_date = "2005-01-01"
+    today = datetime.today()
+    # Limita a janela de consulta a exatamente 10 anos atrás para respeitar o limite da API do BCB
+    start_date_dt = today - timedelta(days=365 * 10)
+    
+    start_date = start_date_dt.strftime('%Y-%m-%d')
+    end_date = today.strftime('%Y-%m-%d')
     
     # 1. US 10-Year TIPS Rate via FRED (DFII10)
     df_us = web.DataReader("DFII10", "fred", start_date, end_date)
     df_us.columns = ["TIPS_10A"]
 
     # 2. NTN-B 10 anos / Juro Real Brasil via biblioteca oficial do BCB (SGS 21619)
-    # A biblioteca python-bcb lida automaticamente com as autenticações do servidor
-    df_br = sgs.get({'NTNB_10A': 21619}, start=start_date)
+    # A janela está restrita a <= 10 anos
+    df_br = sgs.get({'NTNB_10A': 21619}, start=start_date, end=end_date)
     
-    # Garantir fuso horário/índice limpo para o join
+    # Garantir compatibilidade nos índices
     df_br.index = pd.to_datetime(df_br.index)
     df_us.index = pd.to_datetime(df_us.index)
 
