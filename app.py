@@ -82,11 +82,17 @@ try:
     # Construção do Gráfico Interativo
     fig = go.Figure()
 
-    # Faixa Sombreada: Média ± Desvio Padrão
+    # Preparar polígono para a Faixa Sombreada: Média ± Desvio Padrão
+    x_banda = df.index.tolist() + df.index[::-1].tolist()
+    y_superior = [media + std] * len(df)
+    y_inferior = [media - std] * len(df)
+    y_banda = y_superior + y_inferior[::-1]
+
+    # Faixa Sombreada usando 'toself'
     fig.add_trace(go.Scatter(
-        x=df.index.tolist() + df.index[::-1].tolist(),
-        y=(df["Diferencial"] * 0 + media + std).tolist() + (df["Diferencial"] * 0 + media - std)[::-1].tolist(),
-        fill='todense',
+        x=x_banda,
+        y=y_banda,
+        fill='toself',
         fillcolor='rgba(225, 212, 188, 0.4)',
         line=dict(color='rgba(255,255,255,0)'),
         hoverinfo="skip",
