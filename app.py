@@ -3,34 +3,63 @@ import pandas as pd
 import pandas_datareader.data as web
 import plotly.graph_objects as go
 from bcb import sgs
-from datetime import datetime, timedelta
+from datetime import datetime
 
 st.set_page_config(page_title="Diferencial de Juro Real", layout="wide")
 
 st.title("Diferencial de juro real — 10 anos (Brasil – EUA)")
 
 @st.cache_data(ttl=3600)  # Atualiza os dados a cada 1 hora
+def fetch_bcb_historico_completo(codigo_serie, start_year=2005):
+    """
+    Consulta o BCB em blocos de 10 anos para contornar a restrição da API.
+    """
+    current_year = datetime.today().year
+    df_list = []
+    
+    # Faz consultas em blocos de 10 anos
+    for year in range(start_year, current_year + 1, 10):
+        start_date = f"{year}-01-01"
+        end_year = min(year + 9, current_year)
+        
+        # Se for o bloco atual, vai até hoje
+        if end_year == current_year:
+            end_date = datetime.today().strftime('%Y-%m-%d')
+        else:
+            end_date = f"{end_year}-12-31"
+            
+        try:
+            df_bloco = sgs.get({'NTNB_10A': codigo_serie}, start=start_date, end=end_date)
+            if not df_bloco.empty:
+                df_list.append(df_bloco)
+        except Exception:
+            continue
+            
+    if not df_list:
+        raise ValueError("Não foi possível carregar os dados do BCB.")
+        
+    # Junta todos os blocos e remove duplicadas se houver
+    df_completo = pd.concat(df_list)
+    df_completo = df_completo[~df_completo.index.duplicated(keep='first')]
+    return df_completo
+
+@st.cache_data(ttl=3600)
 def load_data():
-    today = datetime.today()
-    # Limita a janela de consulta a exatamente 10 anos atrás para respeitar o limite da API do BCB
-    start_date_dt = today - timedelta(days=365 * 10)
+    start_date = "2005-01-01"
+    end_date = datetime.today().strftime('%Y-%m-%d')
     
-    start_date = start_date_dt.strftime('%Y-%m-%d')
-    end_date = today.strftime('%Y-%m-%d')
-    
-    # 1. US 10-Year TIPS Rate via FRED (DFII10)
+    # 1. US 10-Year TIPS Rate via FRED (DFII10) - O FRED aceita períodos longos
     df_us = web.DataReader("DFII10", "fred", start_date, end_date)
     df_us.columns = ["TIPS_10A"]
 
-    # 2. NTN-B 10 anos / Juro Real Brasil via biblioteca oficial do BCB (SGS 21619)
-    # A janela está restrita a <= 10 anos
-    df_br = sgs.get({'NTNB_10A': 21619}, start=start_date, end=end_date)
+    # 2. NTN-B 10 anos via BCB (busca em blocos para ter todo o histórico)
+    df_br = fetch_bcb_historico_completo(21619, start_year=2005)
     
-    # Garantir compatibilidade nos índices
+    # Garantir compatibilidade nos índices de data
     df_br.index = pd.to_datetime(df_br.index)
     df_us.index = pd.to_datetime(df_us.index)
 
-    # 3. Combinar e calcular diferencial
+    # 3. Combinar e calcular o diferencial
     df = df_br.join(df_us, how="inner").dropna()
     df["Diferencial"] = df["NTNB_10A"] - df["TIPS_10A"]
     
@@ -43,7 +72,7 @@ try:
     ultimo_valor = df["Diferencial"].iloc[-1]
     st.metric(label="Último Diferencial", value=f"{ultimo_valor:.2f} p.p.")
 
-    # Gráfico interativo
+    # Gráfico interativo completo
     fig = go.Figure()
     
     fig.add_trace(go.Scatter(
