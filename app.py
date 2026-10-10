@@ -20,8 +20,11 @@ def load_data():
 
     # 2. NTN-B 10 anos / Juro Real Brasil via API do BCB (SGS 21619)
     url_bcb = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.21619/dados?formato=json"
+    
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7"
     }
     
     response = requests.get(url_bcb, headers=headers, timeout=15)
@@ -31,14 +34,13 @@ def load_data():
 
     data_json = response.json()
 
-    # Garantir que a resposta é uma lista válida de registos
     if not isinstance(data_json, list):
-        raise ValueError("A API do BCB retornou uma resposta em formato inválido ou mensagem de erro.")
+        raise ValueError("A API do BCB não retornou uma lista válida de dados.")
 
     df_br = pd.DataFrame(data_json)
 
     if "data" not in df_br.columns or "valor" not in df_br.columns:
-        raise ValueError("Colunas esperadas ('data', 'valor') não encontradas na resposta da API.")
+        raise ValueError("Colunas 'data' e 'valor' não encontradas no retorno do BCB.")
 
     # Tratar colunas
     df_br["data"] = pd.to_datetime(df_br["data"], format="%d/%m/%Y", errors="coerce")
