@@ -18,21 +18,27 @@ def load_data():
     df_us = web.DataReader("DFII10", "fred", start_date, end_date)
     df_us.columns = ["TIPS_10A"]
 
-    # 2. NTN-B 10 anos / Juro Real Brasil via API do BCB (SGS)
+    # 2. NTN-B 10 anos / Juro Real Brasil via API do BCB (SGS 21619)
     url_bcb = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.21619/dados?formato=json"
-    response = requests.get(url_bcb, timeout=10)
-    data_json = response.json()
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
     
-    # Garante que a resposta é uma lista de dados e não um dicionário de erro
-    if isinstance(data_json, list):
-        df_br = pd.DataFrame(data_json)
-    elif isinstance(data_json, dict):
-        df_br = pd.DataFrame([data_json])
-    else:
-        raise ValueError("Formato de resposta inesperado da API do Banco Central.")
+    response = requests.get(url_bcb, headers=headers, timeout=15)
+    
+    if response.status_code != 200:
+        raise ValueError(f"A API do Banco Central retornou status {response.status_code}.")
+
+    data_json = response.json()
+
+    # Garantir que a resposta é uma lista válida de registos
+    if not isinstance(data_json, list):
+        raise ValueError("A API do BCB retornou uma resposta em formato inválido ou mensagem de erro.")
+
+    df_br = pd.DataFrame(data_json)
 
     if "data" not in df_br.columns or "valor" not in df_br.columns:
-        raise ValueError("A API do BCB não retornou as colunas esperadas ('data' e 'valor').")
+        raise ValueError("Colunas esperadas ('data', 'valor') não encontradas na resposta da API.")
 
     # Tratar colunas
     df_br["data"] = pd.to_datetime(df_br["data"], format="%d/%m/%Y", errors="coerce")
