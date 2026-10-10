@@ -18,25 +18,33 @@ def load_data():
     df_us = web.DataReader("DFII10", "fred", start_date, end_date)
     df_us.columns = ["TIPS_10A"]
 
-    # 2. NTN-B 10 anos / Taxa de juro real Brasil via API do BCB
-    # Série 21619 - IPCA+ 10 anos / NTN-B 10A
+    # 2. NTN-B 10 anos / Juro Real Brasil via API do BCB (SGS)
     url_bcb = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.21619/dados?formato=json"
-    response = requests.get(url_bcb)
+    response = requests.get(url_bcb, timeout=10)
     data_json = response.json()
     
-    # Criar DataFrame explicitamente a partir da lista de dicionários
-    df_br = pd.DataFrame(data_json)
-    
+    # Garante que a resposta é uma lista de dados e não um dicionário de erro
+    if isinstance(data_json, list):
+        df_br = pd.DataFrame(data_json)
+    elif isinstance(data_json, dict):
+        df_br = pd.DataFrame([data_json])
+    else:
+        raise ValueError("Formato de resposta inesperado da API do Banco Central.")
+
+    if "data" not in df_br.columns or "valor" not in df_br.columns:
+        raise ValueError("A API do BCB não retornou as colunas esperadas ('data' e 'valor').")
+
     # Tratar colunas
-    df_br["data"] = pd.to_datetime(df_br["data"], format="%d/%m/%Y")
+    df_br["data"] = pd.to_datetime(df_br["data"], format="%d/%m/%Y", errors="coerce")
     df_br["valor"] = pd.to_numeric(df_br["valor"], errors="coerce")
-    df_br = df_br.dropna(subset=["valor"])
+    df_br = df_br.dropna(subset=["data", "valor"])
     df_br.set_index("data", inplace=True)
     df_br.rename(columns={"valor": "NTNB_10A"}, inplace=True)
 
     # 3. Combinar e calcular diferencial
     df = df_br.join(df_us, how="inner").dropna()
     df["Diferencial"] = df["NTNB_10A"] - df["TIPS_10A"]
+    
     return df
 
 try:
